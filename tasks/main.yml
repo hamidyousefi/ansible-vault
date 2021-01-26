@@ -1,0 +1,83 @@
+---
+- name: install necessary packages
+  apt:
+    name: unzip
+    force_apt_get: yes
+    update_cache: yes
+
+- name: create vault group
+  group:
+    name: vault
+    system: yes
+    state: present
+
+- name: create vault user
+  user:
+    name: vault
+    group: vault
+    system: yes
+    home: /etc/vault.d
+    shell: /bin/false
+    comment: "Vault Service User"
+
+- name: create necessary directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: vault
+    group: vault
+    mode: '0755'
+  with_items:
+    - /tmp/vault
+    - /etc/vault.d
+    - /var/lib/vault
+    - /var/lib/vault/data
+    - /var/log/vault
+
+- name: download vault package file
+  unarchive:
+    src: "https://releases.hashicorp.com/vault/{{ vault_version }}/vault_{{ vault_version }}_linux_amd64.zip"
+    dest: /tmp/vault
+    remote_src: yes
+  environment:
+    http_proxy: "{{ proxy.http }}"
+    https_proxy: "{{ proxy.https }}"
+
+- name: place the vault binary to correct place
+  copy:
+    src: /tmp/vault/vault
+    dest: /usr/local/bin/vault
+    remote_src: yes
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: remove unnecessary leftovers
+  file:
+    path: /tmp/vault
+    state: absent
+
+- name: give vault ability to use mlock syscall
+  shell: setcap cap_ipc_lock=+ep /usr/local/bin/vault
+
+- name: add systemd unit file for vault service
+  template:
+    src: vault.service.j2
+    dest: /usr/lib/systemd/system/vault.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: enable and restart vault service
+
+- name: add vault config files
+  template:
+    src: "{{ item }}"
+    dest: "/etc/vault.d/{{ item | basename | splitext | first }}"
+    owner: vault
+    group: vault
+    mode: '0640'
+  with_items:
+    - vault.hcl.j2
+    - listeners.hcl.j2
+    - "{{ vault_backend | default('raft') }}.hcl.j2"
+  notify: enable and restart vault service

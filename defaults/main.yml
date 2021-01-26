@@ -1,0 +1,7 @@
+---
+vault_version: '1.6.1'
+vault_backend: 'raft'
+vault_api_address: ''
+vault_tls_cert_file: ''
+vault_tls_key_file: ''
+vault_consul_agent_token: ''
